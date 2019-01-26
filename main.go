@@ -4,21 +4,21 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"golang.org/x/oauth2"
 
 	"github.com/skratchdot/open-golang/open"
 
 	"github.com/sromku/go-gitter"
+	"github.com/urfave/cli"
 )
 
 func getConfig() (string, map[string]string, error) {
@@ -98,42 +98,19 @@ func getAccessToken(config map[string]string) (string, error) {
 	return token.AccessToken, nil
 }
 
-func main() {
-	var room string
-	var debug bool
-	flag.BoolVar(&debug, "debug", false, "debug mode")
-	flag.StringVar(&room, "room", "", "URI of room: community/room")
-	flag.Parse()
+func stream(c *cli.Context) error {
+	room := c.String("room")
 	if room == "" {
-		flag.Usage()
-		os.Exit(2)
+		cli.ShowCommandHelp(c, "stream")
+		return nil
 	}
-
-	file, config, err := getConfig()
-	if err != nil {
-		log.Fatal("failed to get configuration:", err)
-	}
-	if config["AccessToken"] == "" {
-		token, err := getAccessToken(config)
-		if err != nil {
-			log.Fatal("faild to get access token:", err)
-		}
-		config["AccessToken"] = token
-		b, err := json.MarshalIndent(config, "", "  ")
-		if err != nil {
-			log.Fatal("failed to store file:", err)
-		}
-		err = ioutil.WriteFile(file, b, 0700)
-		if err != nil {
-			log.Fatal("failed to store file:", err)
-		}
-	}
-
+	config := c.App.Metadata["config"].(map[string]string)
 	api := gitter.New(config["AccessToken"])
-	api.SetDebug(debug, os.Stderr)
+	api.SetDebug(c.GlobalBool("debug"), os.Stderr)
+
 	roomId, err := api.GetRoomId(room)
 	if err != nil {
-		log.Fatal("failed to get room:", err)
+		return fmt.Errorf("failed to get room: %v", err)
 	}
 	faye := api.Faye(roomId)
 	go faye.Listen()
@@ -147,7 +124,112 @@ func main() {
 				ev.Message.From.Username,
 				ev.Message.Text)
 		case *gitter.GitterConnectionClosed:
-			log.Fatal(ev)
+			return fmt.Errorf("connection closed: %v", err)
 		}
 	}
+}
+
+func update(c *cli.Context) error {
+	room := c.String("room")
+	if room == "" {
+		cli.ShowCommandHelp(c, "stream")
+		return nil
+	}
+	var status string
+	if c.Bool("stdin") {
+		b, err := ioutil.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		status = string(b)
+	} else {
+		status = strings.Join(c.Args(), " ")
+	}
+	if status == "" {
+		cli.ShowCommandHelp(c, "update")
+		return nil
+	}
+	config := c.App.Metadata["config"].(map[string]string)
+	api := gitter.New(config["AccessToken"])
+	api.SetDebug(c.GlobalBool("debug"), os.Stderr)
+
+	roomId, err := api.GetRoomId(room)
+	if err != nil {
+		return err
+	}
+	_, err = api.SendMessage(roomId, status)
+	return err
+}
+
+func initialize(c *cli.Context) error {
+	file, config, err := getConfig()
+	if err != nil {
+		return fmt.Errorf("failed to get configuration: %v", err)
+	}
+	if config["AccessToken"] == "" {
+		token, err := getAccessToken(config)
+		if err != nil {
+			return fmt.Errorf("faild to get access token: %v", err)
+		}
+		config["AccessToken"] = token
+		b, err := json.MarshalIndent(config, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to store file: %v", err)
+		}
+		err = ioutil.WriteFile(file, b, 0700)
+		if err != nil {
+			return fmt.Errorf("failed to store file: %v", err)
+		}
+	}
+	c.App.Metadata["config"] = config
+	return nil
+}
+
+func main() {
+	app := cli.NewApp()
+	app.Name = "gitter-cli"
+	app.Usage = "client app for gitter.com"
+	app.Flags = []cli.Flag{
+		cli.BoolFlag{
+			Name:  "debug",
+			Usage: "Debug mode",
+		},
+	}
+	app.Commands = []cli.Command{
+		{
+			Name:    "stream",
+			Aliases: []string{"s"},
+			Usage:   "Watch the room",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "room",
+					Usage: "Room URI (ex: community/room)",
+				},
+			},
+			Action: stream,
+		},
+		{
+			Name:    "update",
+			Aliases: []string{"u"},
+			Usage:   "Update",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "stdin",
+					Usage: "Read from stdin",
+				},
+				cli.StringFlag{
+					Name:  "room",
+					Usage: "Room URI (ex: community/room)",
+				},
+			},
+			Action: update,
+		},
+	}
+	app.Version = "0.0.1"
+	app.Author = "mattn"
+	app.Email = "mattn.jp@gmail.com"
+	app.EnableBashCompletion = true
+	app.Before = initialize
+	app.Setup()
+	app.Run(os.Args)
 }
