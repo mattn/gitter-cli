@@ -25,9 +25,6 @@ func getConfig() (string, map[string]string, error) {
 	dir := os.Getenv("HOME")
 	if dir == "" && runtime.GOOS == "windows" {
 		dir = os.Getenv("APPDATA")
-		if dir == "" {
-			dir = filepath.Join(os.Getenv("USERPROFILE"), "Application Data", "onenote")
-		}
 		dir = filepath.Join(dir, "gitter-cli")
 	} else {
 		dir = filepath.Join(dir, ".config", "gitter-cli")
