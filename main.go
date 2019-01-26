@@ -104,6 +104,8 @@ func stream(c *cli.Context) error {
 		cli.ShowCommandHelp(c, "stream")
 		return nil
 	}
+	ojson := c.Bool("json")
+
 	config := c.App.Metadata["config"].(map[string]string)
 	api := gitter.New(config["AccessToken"])
 	api.SetDebug(c.GlobalBool("debug"), os.Stderr)
@@ -119,10 +121,14 @@ func stream(c *cli.Context) error {
 		event := <-faye.Event
 		switch ev := event.Data.(type) {
 		case *gitter.MessageReceived:
-			fmt.Printf("%s (%s): %s\n",
-				ev.Message.Sent.Format("2006/01/02 15:04:05"),
-				ev.Message.From.Username,
-				ev.Message.Text)
+			if ojson {
+				json.NewEncoder(os.Stdout).Encode(ev)
+			} else {
+				fmt.Printf("%s (%s): %s\n",
+					ev.Message.Sent.Format("2006/01/02 15:04:05"),
+					ev.Message.From.Username,
+					ev.Message.Text)
+			}
 		case *gitter.GitterConnectionClosed:
 			return fmt.Errorf("connection closed: %v", err)
 		}
@@ -149,6 +155,7 @@ func update(c *cli.Context) error {
 		cli.ShowCommandHelp(c, "update")
 		return nil
 	}
+
 	config := c.App.Metadata["config"].(map[string]string)
 	api := gitter.New(config["AccessToken"])
 	api.SetDebug(c.GlobalBool("debug"), os.Stderr)
@@ -201,6 +208,10 @@ func main() {
 			Aliases: []string{"s"},
 			Usage:   "Watch the room",
 			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "json",
+					Usage: "Output JSON",
+				},
 				cli.StringFlag{
 					Name:  "room",
 					Usage: "Room URI (ex: community/room)",
