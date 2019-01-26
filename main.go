@@ -135,6 +135,39 @@ func stream(c *cli.Context) error {
 	}
 }
 
+func recent(c *cli.Context) error {
+	room := c.String("room")
+	if room == "" {
+		cli.ShowCommandHelp(c, "recent")
+		return nil
+	}
+	ojson := c.Bool("json")
+
+	config := c.App.Metadata["config"].(map[string]string)
+	api := gitter.New(config["AccessToken"])
+	api.SetDebug(c.GlobalBool("debug"), os.Stderr)
+
+	roomId, err := api.GetRoomId(room)
+	if err != nil {
+		return err
+	}
+	messages, err := api.GetMessages(roomId, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get messges: %v", err)
+	}
+	if ojson {
+		json.NewEncoder(os.Stdout).Encode(messages)
+	} else {
+		for _, message := range messages {
+			fmt.Printf("%s (%s): %s\n",
+				message.Sent.Format("2006/01/02 15:04:05"),
+				message.From.Username,
+				message.Text)
+		}
+	}
+	return nil
+}
+
 func update(c *cli.Context) error {
 	room := c.String("room")
 	if room == "" {
@@ -203,6 +236,22 @@ func main() {
 		},
 	}
 	app.Commands = []cli.Command{
+		{
+			Name:    "recent",
+			Aliases: []string{"r"},
+			Usage:   "Show recent messages",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "json",
+					Usage: "Output JSON",
+				},
+				cli.StringFlag{
+					Name:  "room",
+					Usage: "Room URI (ex: community/room)",
+				},
+			},
+			Action: recent,
+		},
 		{
 			Name:    "stream",
 			Aliases: []string{"s"},
