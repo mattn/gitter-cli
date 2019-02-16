@@ -121,6 +121,10 @@ func stream(c *cli.Context) error {
 		event := <-faye.Event
 		switch ev := event.Data.(type) {
 		case *gitter.MessageReceived:
+			if ev.Message.From.ID == "" {
+				continue
+			}
+
 			if ojson {
 				json.NewEncoder(os.Stdout).Encode(ev)
 			} else {
