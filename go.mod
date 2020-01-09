@@ -8,5 +8,5 @@ require (
 	github.com/skratchdot/open-golang v0.0.0-20190402232053-79abb63cd66e
 	github.com/sromku/go-gitter v0.0.0-20170828210750-70f7030a94a6
 	github.com/urfave/cli v1.20.0
-	golang.org/x/oauth2 v0.0.0-20190115181402-5dab4167f31c
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 )
